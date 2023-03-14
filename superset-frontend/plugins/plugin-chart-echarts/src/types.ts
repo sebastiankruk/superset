@@ -18,10 +18,12 @@
  */
 import React, { RefObject } from 'react';
 import {
-  BinaryQueryObjectFilterClause,
   ChartDataResponseResult,
   ChartProps,
+  ContextMenuFilters,
+  FilterState,
   HandlerFunction,
+  PlainObject,
   QueryFormColumn,
   SetDataMaskHook,
 } from '@superset-ui/core';
@@ -111,7 +113,7 @@ export enum LabelPositionEnum {
   InsideBottomRight = 'insideBottomRight',
 }
 
-export interface BaseChartProps<T> extends ChartProps<T> {
+export interface BaseChartProps<T extends PlainObject> extends ChartProps<T> {
   queriesData: ChartDataResponseResult[];
 }
 
@@ -122,27 +124,31 @@ export interface BaseTransformedProps<F> {
   onContextMenu?: (
     clientX: number,
     clientY: number,
-    filters?: BinaryQueryObjectFilterClause[],
+    filters?: ContextMenuFilters,
   ) => void;
+  setDataMask?: SetDataMaskHook;
+  filterState?: FilterState;
   refs: Refs;
   width: number;
+  emitCrossFilters?: boolean;
 }
 
 export type CrossFilterTransformedProps = {
-  emitFilter: boolean;
   groupby: QueryFormColumn[];
   labelMap: Record<string, string[]>;
   setControlValue?: HandlerFunction;
   setDataMask: SetDataMaskHook;
   selectedValues: Record<number, string>;
+  emitCrossFilters?: boolean;
 };
 
 export type ContextMenuTransformedProps = {
   onContextMenu?: (
     clientX: number,
     clientY: number,
-    filters?: BinaryQueryObjectFilterClause[],
+    filters?: ContextMenuFilters,
   ) => void;
+  setDataMask?: SetDataMaskHook;
 };
 
 export interface TitleFormData {
@@ -154,5 +160,11 @@ export interface TitleFormData {
 }
 
 export type StackType = boolean | null | Partial<AreaChartExtraControlsValue>;
+
+export interface TreePathInfo {
+  name: string;
+  dataIndex: number;
+  value: number | number[];
+}
 
 export * from './Timeseries/types';

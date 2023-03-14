@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import logging
-from contextlib import closing
+from functools import lru_cache
 from typing import (
     Any,
     Callable,
@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
 from sqlalchemy.sql.type_api import TypeEngine
 
+from superset.constants import LRU_CACHE_MAX_SIZE
 from superset.errors import ErrorLevel, SupersetError, SupersetErrorType
 from superset.exceptions import (
     SupersetGenericDBErrorException,
@@ -50,7 +51,6 @@ from superset.models.core import Database
 from superset.result_set import SupersetResultSet
 from superset.sql_parse import has_table_query, insert_rls, ParsedQuery
 from superset.superset_typing import ResultSetColumnType
-from superset.utils.memoized import memoized
 
 if TYPE_CHECKING:
     from superset.connectors.sqla.models import SqlaTable
@@ -136,18 +136,13 @@ def get_virtual_table_metadata(dataset: SqlaTable) -> List[ResultSetColumnType]:
     # TODO(villebro): refactor to use same code that's used by
     #  sql_lab.py:execute_sql_statements
     try:
-        with dataset.database.get_sqla_engine_with_context(
-            schema=dataset.schema
-        ) as engine:
-            with closing(engine.raw_connection()) as conn:
-                cursor = conn.cursor()
-                query = dataset.database.apply_limit_to_sql(statements[0], limit=1)
-                db_engine_spec.execute(cursor, query)
-                result = db_engine_spec.fetch_data(cursor, limit=1)
-                result_set = SupersetResultSet(
-                    result, cursor.description, db_engine_spec
-                )
-                cols = result_set.columns
+        with dataset.database.get_raw_connection(schema=dataset.schema) as conn:
+            cursor = conn.cursor()
+            query = dataset.database.apply_limit_to_sql(statements[0], limit=1)
+            db_engine_spec.execute(cursor, query)
+            result = db_engine_spec.fetch_data(cursor, limit=1)
+            result_set = SupersetResultSet(result, cursor.description, db_engine_spec)
+            cols = result_set.columns
     except Exception as ex:
         raise SupersetGenericDBErrorException(message=str(ex)) from ex
     return cols
@@ -159,17 +154,14 @@ def get_columns_description(
 ) -> List[ResultSetColumnType]:
     db_engine_spec = database.db_engine_spec
     try:
-        with database.get_sqla_engine_with_context() as engine:
-            with closing(engine.raw_connection()) as conn:
-                cursor = conn.cursor()
-                query = database.apply_limit_to_sql(query, limit=1)
-                cursor.execute(query)
-                db_engine_spec.execute(cursor, query)
-                result = db_engine_spec.fetch_data(cursor, limit=1)
-                result_set = SupersetResultSet(
-                    result, cursor.description, db_engine_spec
-                )
-                return result_set.columns
+        with database.get_raw_connection() as conn:
+            cursor = conn.cursor()
+            query = database.apply_limit_to_sql(query, limit=1)
+            cursor.execute(query)
+            db_engine_spec.execute(cursor, query)
+            result = db_engine_spec.fetch_data(cursor, limit=1)
+            result_set = SupersetResultSet(result, cursor.description, db_engine_spec)
+            return result_set.columns
     except Exception as ex:
         raise SupersetGenericDBErrorException(message=str(ex)) from ex
 
@@ -209,12 +201,12 @@ def validate_adhoc_subquery(
     return ";\n".join(str(statement) for statement in statements)
 
 
-@memoized
+@lru_cache(maxsize=LRU_CACHE_MAX_SIZE)
 def get_dialect_name(drivername: str) -> str:
     return SqlaURL.create(drivername).get_dialect().name
 
 
-@memoized
+@lru_cache(maxsize=LRU_CACHE_MAX_SIZE)
 def get_identifier_quoter(drivername: str) -> Dict[str, Callable[[str], str]]:
     return SqlaURL.create(drivername).get_dialect()().identifier_preparer.quote
 
