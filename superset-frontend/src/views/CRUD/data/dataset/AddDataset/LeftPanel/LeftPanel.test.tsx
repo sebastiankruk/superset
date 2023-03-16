@@ -21,10 +21,11 @@ import fetchMock from 'fetch-mock';
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from 'spec/helpers/testing-library';
 import LeftPanel from 'src/views/CRUD/data/dataset/AddDataset/LeftPanel';
+import { exampleDataset } from 'src/views/CRUD/data/dataset/AddDataset/DatasetPanel/fixtures';
 
 const databasesEndpoint = 'glob:*/api/v1/database/?q*';
 const schemasEndpoint = 'glob:*/api/v1/database/*/schemas*';
-const tablesEndpoint = 'glob:*/superset/tables*';
+const tablesEndpoint = 'glob:*/api/v1/database/*/tables/?q*';
 
 fetchMock.get(databasesEndpoint, {
   count: 2,
@@ -136,8 +137,8 @@ fetchMock.get(schemasEndpoint, {
 });
 
 fetchMock.get(tablesEndpoint, {
-  tableLength: 3,
-  options: [
+  count: 3,
+  result: [
     { value: 'Sheet1', type: 'table', extra: null },
     { value: 'Sheet2', type: 'table', extra: null },
     { value: 'Sheet3', type: 'table', extra: null },
@@ -161,10 +162,10 @@ test('should render schema selector, database selector container, and selects', 
   expect(await screen.findByText(/select database & schema/i)).toBeVisible();
 
   const databaseSelect = screen.getByRole('combobox', {
-    name: 'Select database or type database name',
+    name: 'Select database or type to search databases',
   });
   const schemaSelect = screen.getByRole('combobox', {
-    name: 'Select schema or type schema name',
+    name: 'Select schema or type to search schemas',
   });
   expect(databaseSelect).toBeInTheDocument();
   expect(schemaSelect).toBeInTheDocument();
@@ -181,46 +182,46 @@ test('does not render blank state if there is nothing selected', async () => {
 });
 
 test('renders list of options when user clicks on schema', async () => {
-  render(<LeftPanel setDataset={mockFun} schema="schema_a" dbId={1} />, {
+  render(<LeftPanel setDataset={mockFun} dataset={exampleDataset[0]} />, {
     useRedux: true,
   });
 
   // Click 'test-postgres' database to access schemas
   const databaseSelect = screen.getByRole('combobox', {
-    name: 'Select database or type database name',
-  });
-  // Schema select should be disabled until database is selected
-  const schemaSelect = screen.getByRole('combobox', {
-    name: /select schema or type schema name/i,
+    name: 'Select database or type to search databases',
   });
   userEvent.click(databaseSelect);
   expect(await screen.findByText('test-postgres')).toBeInTheDocument();
-  expect(schemaSelect).toBeDisabled();
   userEvent.click(screen.getByText('test-postgres'));
 
-  // Wait for schema field to be enabled
+  // Schema select will be automatically populated if there is only one schema
+  const schemaSelect = screen.getByRole('combobox', {
+    name: /select schema or type to search schemas/i,
+  });
   await waitFor(() => {
     expect(schemaSelect).toBeEnabled();
   });
 });
 
 test('searches for a table name', async () => {
-  render(<LeftPanel setDataset={mockFun} schema="schema_a" dbId={1} />, {
+  render(<LeftPanel setDataset={mockFun} dataset={exampleDataset[0]} />, {
     useRedux: true,
   });
 
+  // Click 'test-postgres' database to access schemas
   const databaseSelect = screen.getByRole('combobox', {
-    name: /select database or type database name/i,
+    name: /select database or type to search databases/i,
   });
   userEvent.click(databaseSelect);
   userEvent.click(await screen.findByText('test-postgres'));
 
   const schemaSelect = screen.getByRole('combobox', {
-    name: /select schema or type schema name/i,
+    name: /select schema or type to search schemas/i,
   });
 
   await waitFor(() => expect(schemaSelect).toBeEnabled());
 
+  // Click 'public' schema to access tables
   userEvent.click(schemaSelect);
   userEvent.click(screen.getAllByText('public')[1]);
 
@@ -237,4 +238,46 @@ test('searches for a table name', async () => {
     expect(screen.getByText('Sheet2')).toBeInTheDocument();
     expect(screen.queryByText('Sheet3')).not.toBeInTheDocument();
   });
+});
+
+test('renders a warning icon when a table name has a pre-existing dataset', async () => {
+  render(
+    <LeftPanel
+      setDataset={mockFun}
+      dataset={exampleDataset[0]}
+      datasetNames={['Sheet2']}
+    />,
+    {
+      useRedux: true,
+    },
+  );
+
+  // Click 'test-postgres' database to access schemas
+  const databaseSelect = screen.getByRole('combobox', {
+    name: /select database or type to search databases/i,
+  });
+  userEvent.click(databaseSelect);
+  userEvent.click(await screen.findByText('test-postgres'));
+
+  const schemaSelect = screen.getByRole('combobox', {
+    name: /select schema or type to search schemas/i,
+  });
+
+  await waitFor(() => expect(schemaSelect).toBeEnabled());
+
+  // Warning icon should not show yet
+  expect(
+    screen.queryByRole('img', { name: 'warning' }),
+  ).not.toBeInTheDocument();
+
+  // Click 'public' schema to access tables
+  userEvent.click(schemaSelect);
+  userEvent.click(screen.getAllByText('public')[1]);
+
+  await waitFor(() => {
+    expect(screen.getByText('Sheet2')).toBeInTheDocument();
+  });
+
+  // Sheet2 should now show the warning icon
+  expect(screen.getByRole('img', { name: 'warning' })).toBeVisible();
 });
