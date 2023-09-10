@@ -45,22 +45,21 @@ class Dashboard(Base):
 
 
 def upgrade():
-    # bind = op.get_bind()
-    # session = db.Session(bind=bind)
+    bind = op.get_bind()
+    session = db.Session(bind=bind)
 
-    # for dashboard in session.query(Dashboard).all():
-    #     try:
-    #         json_metadata = json.loads(dashboard.json_metadata)
+    for dashboard in session.query(Dashboard).all():
+        try:
+            json_metadata = json.loads(dashboard.json_metadata)
 
-    #         if "show_native_filters" in json_metadata:
-    #             del json_metadata["show_native_filters"]
-    #             dashboard.json_metadata = json.dumps(json_metadata)
-    #     except Exception:  # pylint: disable=broad-except
-    #         pass
+            if "show_native_filters" in json_metadata:
+                del json_metadata["show_native_filters"]
+                dashboard.json_metadata = json.dumps(json_metadata)
+        except Exception:  # pylint: disable=broad-except
+            pass
 
-    # session.commit()
-    # session.close()
-    pass
+    session.commit()
+    session.close()
 
 
 def downgrade():
