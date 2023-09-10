@@ -48,8 +48,8 @@ export const useNativeFilters = () => {
   );
 
   const nativeFiltersEnabled =
-    showNativeFilters &&
-    isFeatureEnabled(FeatureFlag.DASHBOARD_NATIVE_FILTERS) &&
+      showNativeFilters &&
+      isFeatureEnabled(FeatureFlag.DASHBOARD_NATIVE_FILTERS) &&
     (canEdit || (!canEdit && filterValues.length !== 0));
 
   const requiredFirstFilter = filterValues.filter(
